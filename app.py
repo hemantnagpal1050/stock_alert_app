@@ -7,12 +7,7 @@ st.set_page_config(page_title="📈 5-Min RSI + Volume Spike Scanner", layout="w
 st.title("📈 RSI Rising + Volume Spike (5-Min) Scanner")
 
 tickers_input = st.text_area("Enter up to 200 stock symbols (comma-separated):", 
-"RELIANCE.NS, TCS.NS, INFY.NS, HDFCBANK.NS, ICICIBANK.NS, LT.NS, SBIN.NS, BAJAJFINSV.NS, "
-"AXISBANK.NS, BHARTIARTL.NS, ITC.NS, DABUR.NS, M&M.NS, TATAPOWER.NS, SUNPHARMA.NS, "
-"ADANIPOWER.NS, ADANIENT.NS, LICHSGFIN.NS, CHOLAFIN.NS, CUMMINSIND.NS, BHEL.NS, TVSMOTOR.NS, "
-"POLYCAB.NS, CROMPTON.NS, VGUARD.NS, IRCTC.NS, IRFC.NS, NHPC.NS, HUDCO.NS, BALKRISIND.NS, "
-"MPHASIS.NS, COFORGE.NS, PERSISTENT.NS, NAVINFLUOR.NS, IEX.NS, ASTRAL.NS, AARTIIND.NS, "
-"GUJGASLTD.NS, GSPL.NS, VBL.NS, ZEEL.NS, CESC.NS, JUBLFOOD.NS, DELHIVERY.NS")
+"HAL.NS")
 
 tickers = [t.strip().upper() for t in tickers_input.split(",") if t.strip()]
 
