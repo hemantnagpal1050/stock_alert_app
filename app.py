@@ -1,55 +1,52 @@
 import yfinance as yf
 import pandas as pd
-import numpy as np
-import streamlit as st
-
-def fetch_rsi(series: pd.Series, period: int = 14) -> pd.Series:
-    delta = series.diff()
-    gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
-    loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
-    rs = gain / loss
-    rsi = 100 - (100 / (1 + rs))
-    return rsi
+import ta
 
 def analyze_stocks(tickers):
     results = []
 
     for ticker in tickers:
         try:
+            # Download 60 trading days (~3 months)
             df = yf.download(ticker, period='60d', interval='1d', auto_adjust=True)
-            if df.empty or len(df) < 30:
-                st.warning(f"{ticker}: Not enough data")
+
+            if df.shape[0] < 10:
+                print(f"{ticker}: Not enough data")
                 continue
 
-            df['RSI'] = fetch_rsi(df['Close'])
-            df['Volume_5W_Avg'] = df['Volume'].rolling(window=5).mean()
+            # Calculate RSI (14-day)
+            df['RSI'] = ta.momentum.RSIIndicator(close=df['Close'], window=14).rsi()
 
+            # Loop through data starting from the 6th row to ensure we have 5 previous days for volume avg
             for i in range(5, len(df)):
-                volume_spike = df['Volume'].iloc[i] >= 5 * df['Volume_5W_Avg'].iloc[i]
-                price_up = df['Close'].iloc[i] > df['Close'].iloc[i - 1]
-                rsi_ok = df['RSI'].iloc[i] < 70
+                last_5_avg_volume = df['Volume'].iloc[i-5:i].mean()
+                today_volume = df['Volume'].iloc[i]
+                today_close = df['Close'].iloc[i]
+                prev_close = df['Close'].iloc[i-1]
+                today_rsi = df['RSI'].iloc[i]
 
-                if volume_spike and price_up and rsi_ok:
-                    results.append((ticker, df.index[i].date()))
-                    break
+                volume_condition = today_volume >= 5 * last_5_avg_volume
+                price_condition = today_close > prev_close
+                rsi_condition = today_rsi < 70
+
+                if volume_condition and price_condition and rsi_condition:
+                    alert_date = df.index[i].strftime('%Y-%m-%d')
+                    results.append((ticker, alert_date))
+                    print(f"{ticker}: Alert on {alert_date} (Volume spike + Price up + RSI {today_rsi:.2f})")
+                    break  # Stop after first alert to avoid duplicates
 
         except Exception as e:
-            st.error(f"{ticker}: Error - {e}")
+            print(f"{ticker}: Error - {e}")
 
     return results
 
-st.title("📈 Volume Spike + RSI Screener")
+# 🔽 Example midcap stock list (10 tickers for demo - replace with full list of 200 if needed)
+tickers = [
+    'TTML.NS', 'UCOBANK.NS', 'VGUARD.NS', 'VBL.NS', 'ZUARI.NS',
+    'RELIANCE.NS', 'TCS.NS', 'HDFCBANK.NS', 'ICICIBANK.NS', 'LT.NS'
+]
 
-tickers_input = st.text_area("Enter stock tickers (comma-separated)", 
-                             "RELIANCE.NS, TCS.NS, HDFCBANK.NS")
-tickers = [t.strip().upper() for t in tickers_input.split(',') if t.strip()]
-
-if st.button("Run Screener"):
-    with st.spinner("Analyzing..."):
-        alerts = analyze_stocks(tickers)
-        if alerts:
-            st.success("📢 Alerts:")
-            for ticker, date in alerts:
-                st.write(f"**{ticker}** triggered alert on **{date}**")
-        else:
-            st.info("No alerts found.")
+alerts = analyze_stocks(tickers)
+print("\n✅ Final Alert List:")
+for ticker, date in alerts:
+    print(f"{ticker} → Alert on {date}")
