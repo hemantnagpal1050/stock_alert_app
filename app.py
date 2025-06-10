@@ -1,7 +1,5 @@
-# app.py
-import streamlit as st
-import pandas as pd
 import yfinance as yf
+import pandas as pd
 
 def calculate_rsi(series, period=14):
     delta = series.diff()
