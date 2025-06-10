@@ -14,7 +14,7 @@ def analyze_stock(ticker):
         df.dropna(inplace=True)
 
         # Fix: ensure close is a 1D float Series
-         df['RSI'] = ta.momentum.RSIIndicator(close=df['Close'].squeeze()).rsi()
+        df['RSI'] = ta.momentum.RSIIndicator(close=df['Close'].squeeze()).rsi()
         df['Prev_Close'] = df['Close'].shift(1)
         df['Volume_5wk_Avg'] = df['Volume'].rolling(window=5).mean()
         df['Volume_Spike'] = df['Volume'] > 5 * df['Volume_5wk_Avg']
