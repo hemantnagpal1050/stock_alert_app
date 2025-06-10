@@ -1,54 +1,55 @@
 import yfinance as yf
 import pandas as pd
 import numpy as np
-import ta
 import streamlit as st
 
-st.title("📈 Volume Spike + RSI Alert System")
+def fetch_rsi(series: pd.Series, period: int = 14) -> pd.Series:
+    delta = series.diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+    rs = gain / loss
+    rsi = 100 - (100 / (1 + rs))
+    return rsi
 
-tickers_input = st.text_area("Enter comma-separated stock symbols (e.g., RELIANCE.NS, TCS.NS):", "RELIANCE.NS, TCS.NS, HDFCBANK.NS")
-tickers = [ticker.strip().upper() for ticker in tickers_input.split(",") if ticker.strip()]
+def analyze_stocks(tickers):
+    results = []
 
-def analyze_stock(ticker):
-    try:
-        df = yf.download(ticker, period='60d', interval='1d')
-        if df.empty or len(df) < 30:
-            return f"{ticker}: Not enough data"
-
-        df['RSI'] = ta.momentum.RSIIndicator(df['Close']).rsi()
-
-        alerts = []
-
-        for i in range(30, len(df)):
-            week_volume = df['Volume'].iloc[i-7:i].sum()
-            past_5_weeks_volume_avg = []
-
-            for w in range(1, 6):
-                start = i - 7 * (w + 1)
-                end = i - 7 * w
-                if start < 0: continue
-                past_5_weeks_volume_avg.append(df['Volume'].iloc[start:end].sum())
-
-            if len(past_5_weeks_volume_avg) < 5:
+    for ticker in tickers:
+        try:
+            df = yf.download(ticker, period='60d', interval='1d', auto_adjust=True)
+            if df.empty or len(df) < 30:
+                st.warning(f"{ticker}: Not enough data")
                 continue
 
-            avg_volume = np.mean(past_5_weeks_volume_avg)
-            price_up = df['Close'].iloc[i] > df['Close'].iloc[i-1]
-            rsi_ok = df['RSI'].iloc[i] < 70
+            df['RSI'] = fetch_rsi(df['Close'])
+            df['Volume_5W_Avg'] = df['Volume'].rolling(window=5).mean()
 
-            if week_volume >= 5 * avg_volume and price_up and rsi_ok:
-                alerts.append(df.index[i].strftime('%Y-%m-%d'))
+            for i in range(5, len(df)):
+                volume_spike = df['Volume'].iloc[i] >= 5 * df['Volume_5W_Avg'].iloc[i]
+                price_up = df['Close'].iloc[i] > df['Close'].iloc[i - 1]
+                rsi_ok = df['RSI'].iloc[i] < 70
 
-        if alerts:
-            return f"{ticker}: Alerts on {alerts}"
-        else:
-            return f"{ticker}: No signal"
-    except Exception as e:
-        return f"{ticker}: Error - {e}"
+                if volume_spike and price_up and rsi_ok:
+                    results.append((ticker, df.index[i].date()))
+                    break
 
-if st.button("Run Strategy"):
+        except Exception as e:
+            st.error(f"{ticker}: Error - {e}")
+
+    return results
+
+st.title("📈 Volume Spike + RSI Screener")
+
+tickers_input = st.text_area("Enter stock tickers (comma-separated)", 
+                             "RELIANCE.NS, TCS.NS, HDFCBANK.NS")
+tickers = [t.strip().upper() for t in tickers_input.split(',') if t.strip()]
+
+if st.button("Run Screener"):
     with st.spinner("Analyzing..."):
-        results = [analyze_stock(ticker) for ticker in tickers]
-    st.subheader("📊 Results")
-    for res in results:
-        st.write(res)
+        alerts = analyze_stocks(tickers)
+        if alerts:
+            st.success("📢 Alerts:")
+            for ticker, date in alerts:
+                st.write(f"**{ticker}** triggered alert on **{date}**")
+        else:
+            st.info("No alerts found.")
