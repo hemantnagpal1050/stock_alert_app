@@ -1,48 +1,68 @@
 import yfinance as yf
 import pandas as pd
-import streamlit as st
-import ta  # Make sure to install the 'ta' package: pip install ta
+import ta
+from datetime import datetime
 
-def fetch_data(ticker):
-    df = yf.download(ticker, period="45d", interval="1d", auto_adjust=True)
+
+def fetch_stock_data(ticker):
+    df = yf.download(ticker, period="60d", interval="1d", auto_adjust=True)
+    if df.empty or len(df) < 30:
+        raise ValueError("Not enough data")
+
     df = df[['Close', 'Volume']].dropna()
+
+    # Calculate RSI
     df['RSI'] = ta.momentum.RSIIndicator(close=df['Close'], window=14).rsi()
-    return df
+    return df.dropna()
+
 
 def check_conditions(df):
     alerts = []
-    for i in range(30, len(df)):
-        last_5_week_volume_avg = df['Volume'].iloc[i-5:i].mean()
-        current_volume = df['Volume'].iloc[i]
-        current_close = df['Close'].iloc[i]
-        prev_close = df['Close'].iloc[i-1]
-        current_rsi = df['RSI'].iloc[i]
 
-        if current_volume >= 5 * last_5_week_volume_avg and current_close > prev_close and current_rsi < 70:
-            alerts.append((df.index[i].date(), current_volume, current_close, current_rsi))
+    for i in range(30, len(df)):
+        current_day = df.iloc[i]
+        prev_day = df.iloc[i - 1]
+        week_volume = df['Volume'].iloc[i-6:i+1].sum()
+        prev_5_week_volume = df['Volume'].iloc[i-35:i-6].sum() / 5 if i >= 35 else 0
+
+        # Condition 1: Last week volume is 5x of last 5 weeks avg volume
+        volume_spike = week_volume >= 5 * prev_5_week_volume if prev_5_week_volume > 0 else False
+
+        # Condition 2: Current close > previous close
+        price_up = current_day['Close'] > prev_day['Close']
+
+        # Condition 3: RSI not overbought (i.e., < 70)
+        rsi_ok = current_day['RSI'] < 70
+
+        if volume_spike and price_up and rsi_ok:
+            alerts.append((df.index[i].strftime('%Y-%m-%d')))
+
     return alerts
 
-st.title("📊 Volume Spike + RSI Strategy")
 
-stock_input = st.text_area("Enter stock symbols (comma separated):", "RELIANCE.NS, TCS.NS, HDFCBANK.NS")
-tickers = [s.strip().upper() for s in stock_input.split(',') if s.strip()]
+def analyze_stocks(tickers):
+    final_alerts = {}
 
-if st.button("Run Strategy"):
-    with st.spinner("Analyzing stocks..."):
-        alert_results = {}
-        for ticker in tickers:
-            try:
-                df = fetch_data(ticker)
-                alerts = check_conditions(df)
-                if alerts:
-                    alert_results[ticker] = alerts
-            except Exception as e:
-                st.warning(f"{ticker}: Error - {e}")
+    for ticker in tickers:
+        try:
+            df = fetch_stock_data(ticker)
+            alert_dates = check_conditions(df)
+            if alert_dates:
+                final_alerts[ticker] = alert_dates
+        except Exception as e:
+            print(f"{ticker}: Error - {e}")
 
-        if alert_results:
-            st.success("Stocks that matched the alert conditions:")
-            for ticker, alerts in alert_results.items():
-                st.write(f"**{ticker}**")
-                st.dataframe(pd.DataFrame(alerts, columns=["Date", "Volume", "Close", "RSI"]))
-        else:
-            st.info("No stocks matched the conditions.")
+    return final_alerts
+
+
+# Example list of stocks (you can replace with Nifty Midcap 100)
+tickers = [
+    'RELIANCE.NS', 'TCS.NS', 'HDFCBANK.NS', 'ICICIBANK.NS', 'LT.NS',
+    'KOTAKBANK.NS', 'SBIN.NS', 'AXISBANK.NS', 'ITC.NS', 'INFY.NS'
+]
+
+alerts = analyze_stocks(tickers)
+
+print("\nStock Alerts (Volume Spike + RSI Strategy):")
+for stock, dates in alerts.items():
+    print(f"{stock}: Alert Dates: {dates}")
